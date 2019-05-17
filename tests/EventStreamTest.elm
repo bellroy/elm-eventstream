@@ -46,7 +46,7 @@ suite =
     Test.describe "EventStream"
         [ Test.test "Add a valid TestEvent"
             (\() ->
-                case EventStream.addEvent mockEventStream mockRawTestEvent of
+                case EventStream.addEvent mockRawTestEvent mockEventStream of
                     Ok ( updatedEventStream, _ ) ->
                         Expect.pass
 
@@ -55,7 +55,7 @@ suite =
             )
         , Test.test "Add an non existing event"
             (\() ->
-                case EventStream.addEvent mockEventStream mockRawNonExistingEvent of
+                case EventStream.addEvent mockRawNonExistingEvent mockEventStream of
                     Ok ( updatedEventStream, _ ) ->
                         Expect.fail "Expected to fail"
 
@@ -64,7 +64,7 @@ suite =
             )
         , Test.test "Receive an outgoingEvent"
             (\() ->
-                case EventStream.addEvent mockEventStream mockRawTestEvent of
+                case EventStream.addEvent mockRawTestEvent mockEventStream of
                     Ok ( updatedEventStream, [ outgoingEvent ] ) ->
                         case Decode.decodeValue Decode.string outgoingEvent of
                             Ok string ->
@@ -90,7 +90,7 @@ suite =
                             , ( "TestEvent", mockTestEventEncoder )
                             ]
                 in
-                case EventStream.addEvent useEventStream mockRawTestEvent of
+                case EventStream.addEvent mockRawTestEvent useEventStream of
                     Ok ( updatedEventStream, [ outgoingEvent, _ ] ) ->
                         case Decode.decodeValue Decode.string outgoingEvent of
                             Ok string ->

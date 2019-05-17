@@ -78,9 +78,9 @@ The minimal expected structure of an event needs to look like;
 ```
 
 -}
-addEvent : EventStream -> RawIncomingEvent -> Result Error ( EventStream, List RawOutgoingEvent )
-addEvent ((EventStream incomingEventsDecoders outgoingEventsEncoders listOfEvents) as eventStream) rawIncomingEvent =
-    case getEventNameAndDecoder eventStream rawIncomingEvent of
+addEvent : RawIncomingEvent -> EventStream -> Result Error ( EventStream, List RawOutgoingEvent )
+addEvent rawIncomingEvent ((EventStream incomingEventsDecoders outgoingEventsEncoders listOfEvents) as eventStream) =
+    case getEventNameAndDecoder rawIncomingEvent eventStream of
         Err error ->
             Err error
 
@@ -100,7 +100,7 @@ addEvent ((EventStream incomingEventsDecoders outgoingEventsEncoders listOfEvent
                                 outgoingEventsEncoders
                                 (event :: listOfEvents)
                     in
-                    case triggerOutgoingEvents updatedEventStream event of
+                    case triggerOutgoingEvents event updatedEventStream of
                         Err error ->
                             Err error
 
@@ -129,8 +129,8 @@ errorToString error =
 
 {-| Takes the eventStream and for given event returns a list of triggered outgoing events
 -}
-triggerOutgoingEvents : EventStream -> Event -> Result Error (List RawOutgoingEvent)
-triggerOutgoingEvents ((EventStream _ (Triggers outgoingEventEncoders) _) as eventStream) ((Event eventName rawIncomingEvent) as event) =
+triggerOutgoingEvents : Event -> EventStream -> Result Error (List RawOutgoingEvent)
+triggerOutgoingEvents ((Event eventName rawIncomingEvent) as event) ((EventStream _ (Triggers outgoingEventEncoders) _) as eventStream) =
     let
         triggerOutgoingEvent ( matcher, outgoingEventEncoder ) =
             if String.contains eventName matcher then
@@ -172,8 +172,8 @@ fieldNameEventData =
 {- Attempt to find the eventName and validity decoder for given RawIncomingEvent -}
 
 
-getEventNameAndDecoder : EventStream -> RawIncomingEvent -> Result Error ( EventName, Decoder Bool )
-getEventNameAndDecoder (EventStream (IncomingEventDecoders incomingEventsDecoders) _ _) rawIncomingEvent =
+getEventNameAndDecoder : RawIncomingEvent -> EventStream -> Result Error ( EventName, Decoder Bool )
+getEventNameAndDecoder rawIncomingEvent (EventStream (IncomingEventDecoders incomingEventsDecoders) _ _) =
     case Decode.decodeValue (Decode.field fieldNameEventName Decode.string) rawIncomingEvent of
         Err decodeError ->
             Err (DecodeError decodeError)
@@ -188,8 +188,8 @@ getEventNameAndDecoder (EventStream (IncomingEventDecoders incomingEventsDecoder
 {- Attempt to find the eventName for given RawIncomingEvent -}
 
 
-getEventName : EventStream -> RawIncomingEvent -> Maybe EventName
-getEventName (EventStream (IncomingEventDecoders incomingEventsDecoders) _ _) rawIncomingEvent =
+getEventName : RawIncomingEvent -> EventStream -> Maybe EventName
+getEventName rawIncomingEvent (EventStream (IncomingEventDecoders incomingEventsDecoders) _ _) =
     case Decode.decodeValue (Decode.field fieldNameEventName Decode.string) rawIncomingEvent of
         Err decodeError ->
             Nothing
