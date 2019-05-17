@@ -21,6 +21,6 @@ eventStream =
 
 ```elm
 (updatedEventStream, listOfOutgoingEvents) =
-    EventStream.addEvent eventStream anEncodedValue
+    EventStream.addEvent anEncodedValue eventStream
 
 ```
