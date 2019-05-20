@@ -1,6 +1,6 @@
 module EventStreamTest exposing (suite)
 
-import EventStream exposing (Error, EventStream, addEvent, errorToString, init)
+import EventStream exposing (Error, EventStream, addEvent, errorToString, getEvents, init)
 import Expect as Expect exposing (equal, fail, pass)
 import Json.Decode as Decode exposing (Decoder, decodeValue, errorToString, string, succeed)
 import Json.Encode as Encode exposing (Value, null, object, string)
@@ -9,6 +9,11 @@ import Test as Test exposing (Test, describe, test)
 
 mockTestEventDecoder : Decode.Decoder Bool
 mockTestEventDecoder =
+    Decode.succeed True
+
+
+mockAnotherTestEventDecoder : Decode.Decoder Bool
+mockAnotherTestEventDecoder =
     Decode.succeed True
 
 
@@ -25,6 +30,14 @@ mockRawTestEvent =
         ]
 
 
+mockRawAnotherTestEvent : Encode.Value
+mockRawAnotherTestEvent =
+    Encode.object
+        [ ( "eventName", Encode.string "AnotherTestEvent" )
+        , ( "eventData", Encode.null )
+        ]
+
+
 mockRawNonExistingEvent : Encode.Value
 mockRawNonExistingEvent =
     Encode.object
@@ -37,6 +50,7 @@ mockEventStream : EventStream
 mockEventStream =
     EventStream.init
         [ ( "TestEvent", mockTestEventDecoder )
+        , ( "AnotherTestEvent", mockAnotherTestEventDecoder )
         ]
         [ ( "TestEvent", mockTestEventEncoder ) ]
 
@@ -104,5 +118,20 @@ suite =
 
                     Err error ->
                         Expect.fail <| EventStream.errorToString error
+            )
+        , Test.test "Get past occurrences of a specific event"
+            (\() ->
+                let
+                    resultUpdatedEventStream =
+                        EventStream.addEvent mockRawAnotherTestEvent mockEventStream
+                            |> Result.andThen (EventStream.addEvent mockRawTestEvent << Tuple.first)
+                            |> Result.andThen (EventStream.addEvent mockRawAnotherTestEvent << Tuple.first)
+                in
+                case resultUpdatedEventStream of
+                    Err error ->
+                        Expect.fail <| EventStream.errorToString error
+
+                    Ok ( updatedEventStream, _ ) ->
+                        Expect.equal (List.length <| EventStream.getEvents "AnotherTestEvent" updatedEventStream) 2
             )
         ]

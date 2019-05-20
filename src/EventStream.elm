@@ -3,6 +3,7 @@ module EventStream exposing
     , EventStream
     , addEvent
     , errorToString
+    , getEvents
     , init
     )
 
@@ -111,6 +112,21 @@ addEvent rawIncomingEvent ((EventStream incomingEventsDecoders outgoingEventsEnc
                                 )
 
 
+{-| Get RawIncomingEvents that match query from the eventStream
+-}
+getEvents : Matcher -> EventStream -> List RawIncomingEvent
+getEvents matcher ((EventStream _ _ listOfEvents) as eventStream) =
+    List.filterMap
+        (\(Event eventName rawIncomingEvent) ->
+            if eventName == matcher then
+                Just rawIncomingEvent
+
+            else
+                Nothing
+        )
+        listOfEvents
+
+
 {-| Convert an EventStream error into a String that is nice for debugging.
 -}
 errorToString : Error -> String
@@ -133,7 +149,7 @@ triggerOutgoingEvents : Event -> EventStream -> Result Error (List RawOutgoingEv
 triggerOutgoingEvents ((Event eventName rawIncomingEvent) as event) ((EventStream _ (Triggers outgoingEventEncoders) _) as eventStream) =
     let
         triggerOutgoingEvent ( matcher, outgoingEventEncoder ) =
-            if String.contains eventName matcher then
+            if eventName == matcher then
                 Just <| outgoingEventEncoder matcher rawIncomingEvent
 
             else
