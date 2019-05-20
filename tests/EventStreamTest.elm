@@ -1,24 +1,34 @@
 module EventStreamTest exposing (suite)
 
-import EventStream exposing (Error, EventStream, addEvent, errorToString, getEvents, init)
+import EventStream exposing (Error, EventStream, Matcher, addEvent, errorToString, getEvents, init)
 import Expect as Expect exposing (equal, fail, pass)
-import Json.Decode as Decode exposing (Decoder, decodeValue, errorToString, string, succeed)
+import Json.Decode as Decode exposing (Decoder, andThen, decodeValue, errorToString, field, string, succeed)
 import Json.Encode as Encode exposing (Value, null, object, string)
 import Test as Test exposing (Test, describe, test)
 
 
-mockTestEventDecoder : Decode.Decoder Bool
-mockTestEventDecoder =
-    Decode.succeed True
+mockTestEventMatcher : Matcher -> Decode.Decoder Bool
+mockTestEventMatcher _ =
+    Decode.succeed False
 
 
-mockAnotherTestEventDecoder : Decode.Decoder Bool
-mockAnotherTestEventDecoder =
-    Decode.succeed True
+mockAnotherTestEventMatcher : Matcher -> Decode.Decoder Bool
+mockAnotherTestEventMatcher matcher =
+    Decode.field "eventData"
+        (Decode.field "someField" Decode.string
+            |> Decode.andThen
+                (\someFieldValue ->
+                    if matcher == ("AnotherTestEvent." ++ someFieldValue) then
+                        Decode.succeed True
+
+                    else
+                        Decode.succeed False
+                )
+        )
 
 
-mockTestEventEncoder : String -> Decode.Value -> Result EventStream.Error Encode.Value
-mockTestEventEncoder matcher rawEvent =
+mockTestEventEncoder : Matcher -> Decode.Value -> EventStream -> Result EventStream.Error Encode.Value
+mockTestEventEncoder matcher rawEvent eventStream =
     Ok <| Encode.string "outgoing"
 
 
@@ -30,11 +40,15 @@ mockRawTestEvent =
         ]
 
 
-mockRawAnotherTestEvent : Encode.Value
-mockRawAnotherTestEvent =
+mockRawAnotherTestEvent : String -> Encode.Value
+mockRawAnotherTestEvent fieldValue =
     Encode.object
         [ ( "eventName", Encode.string "AnotherTestEvent" )
-        , ( "eventData", Encode.null )
+        , ( "eventData"
+          , Encode.object
+                [ ( "someField", Encode.string fieldValue )
+                ]
+          )
         ]
 
 
@@ -49,8 +63,8 @@ mockRawNonExistingEvent =
 mockEventStream : EventStream
 mockEventStream =
     EventStream.init
-        [ ( "TestEvent", mockTestEventDecoder )
-        , ( "AnotherTestEvent", mockAnotherTestEventDecoder )
+        [ ( "TestEvent", mockTestEventMatcher )
+        , ( "AnotherTestEvent", mockAnotherTestEventMatcher )
         ]
         [ ( "TestEvent", mockTestEventEncoder ) ]
 
@@ -98,7 +112,7 @@ suite =
                 let
                     useEventStream =
                         EventStream.init
-                            [ ( "TestEvent", mockTestEventDecoder )
+                            [ ( "TestEvent", mockTestEventMatcher )
                             ]
                             [ ( "TestEvent", mockTestEventEncoder )
                             , ( "TestEvent", mockTestEventEncoder )
@@ -113,19 +127,44 @@ suite =
                             Err error ->
                                 Expect.fail <| Decode.errorToString error
 
-                    Ok ( updatedEventStream, _ ) ->
-                        Expect.fail "Expected to receive two outgoingEvents"
+                    Ok ( updatedEventStream, listOutgoingEvent ) ->
+                        Expect.fail ("Expected to receive two outgoingEvents, got " ++ (String.fromInt <| List.length listOutgoingEvent))
 
                     Err error ->
                         Expect.fail <| EventStream.errorToString error
             )
-        , Test.test "Get past occurrences of a specific event"
+        , Test.test "You can set a trigger for a specific event using matchers"
+            (\() ->
+                let
+                    useEventStream =
+                        EventStream.init
+                            [ ( "AnotherTestEvent", mockAnotherTestEventMatcher )
+                            ]
+                            [ ( "AnotherTestEvent.triggerMe", mockTestEventEncoder )
+                            ]
+                in
+                case EventStream.addEvent (mockRawAnotherTestEvent "triggerMe") useEventStream of
+                    Ok ( updatedEventStream, [ outgoingEvent ] ) ->
+                        case Decode.decodeValue Decode.string outgoingEvent of
+                            Ok string ->
+                                Expect.equal string "outgoing"
+
+                            Err error ->
+                                Expect.fail <| Decode.errorToString error
+
+                    Ok ( updatedEventStream, listOutgoingEvent ) ->
+                        Expect.fail ("Expected to receive a single outgoingEvent, got " ++ (String.fromInt <| List.length listOutgoingEvent))
+
+                    Err error ->
+                        Expect.fail <| EventStream.errorToString error
+            )
+        , Test.test "Get past occurrences of an event"
             (\() ->
                 let
                     resultUpdatedEventStream =
-                        EventStream.addEvent mockRawAnotherTestEvent mockEventStream
+                        EventStream.addEvent (mockRawAnotherTestEvent "someValue") mockEventStream
                             |> Result.andThen (EventStream.addEvent mockRawTestEvent << Tuple.first)
-                            |> Result.andThen (EventStream.addEvent mockRawAnotherTestEvent << Tuple.first)
+                            |> Result.andThen (EventStream.addEvent (mockRawAnotherTestEvent "someOtherValue") << Tuple.first)
                 in
                 case resultUpdatedEventStream of
                     Err error ->
@@ -133,5 +172,20 @@ suite =
 
                     Ok ( updatedEventStream, _ ) ->
                         Expect.equal (List.length <| EventStream.getEvents "AnotherTestEvent" updatedEventStream) 2
+            )
+        , Test.test "Get past occurrences of a specific event (using matcher)"
+            (\() ->
+                let
+                    resultUpdatedEventStream =
+                        EventStream.addEvent (mockRawAnotherTestEvent "someValue") mockEventStream
+                            |> Result.andThen (EventStream.addEvent mockRawTestEvent << Tuple.first)
+                            |> Result.andThen (EventStream.addEvent (mockRawAnotherTestEvent "someOtherValue") << Tuple.first)
+                in
+                case resultUpdatedEventStream of
+                    Err error ->
+                        Expect.fail <| EventStream.errorToString error
+
+                    Ok ( updatedEventStream, _ ) ->
+                        Expect.equal (List.length <| EventStream.getEvents "AnotherTestEvent.someOtherValue" updatedEventStream) 1
             )
         ]

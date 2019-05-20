@@ -1,6 +1,7 @@
 module EventStream exposing
     ( Error
     , EventStream
+    , Matcher
     , addEvent
     , errorToString
     , getEvents
@@ -19,11 +20,15 @@ type Error
 
 
 type EventStream
-    = EventStream IncomingEventDecoders Triggers ListOfIncomingEvents
+    = EventStream IncomingEventMatchers Triggers ListOfIncomingEvents
 
 
-type IncomingEventDecoders
-    = IncomingEventDecoders (Dict.Dict EventName (Decode.Decoder Bool))
+type IncomingEventMatchers
+    = IncomingEventMatchers (Dict.Dict EventName IncomingEventMatcher)
+
+
+type alias IncomingEventMatcher =
+    Matcher -> Decode.Decoder Bool
 
 
 type Triggers
@@ -31,7 +36,7 @@ type Triggers
 
 
 type alias OutgoingEventDecoder =
-    Matcher -> Decode.Value -> Result Error Encode.Value
+    Matcher -> Decode.Value -> EventStream -> Result Error Encode.Value
 
 
 type alias ListOfIncomingEvents =
@@ -60,10 +65,10 @@ type alias RawOutgoingEvent =
 
 {-| Create an EventStream
 -}
-init : List ( String, Decode.Decoder Bool ) -> List ( Matcher, OutgoingEventDecoder ) -> EventStream
-init listOfIncomingEventDecoders listOfTriggers =
+init : List ( String, IncomingEventMatcher ) -> List ( Matcher, OutgoingEventDecoder ) -> EventStream
+init listOfIncomingEventMatchers listOfTriggers =
     EventStream
-        (IncomingEventDecoders <| Dict.fromList listOfIncomingEventDecoders)
+        (IncomingEventMatchers <| Dict.fromList listOfIncomingEventMatchers)
         (Triggers listOfTriggers)
         []
 
@@ -74,30 +79,30 @@ The minimal expected structure of an event needs to look like;
 
 ```json
 { "eventName": "YourEventName",
-  "eventData": "Data for which you supply a decoder that confirms it's validity"
+  "eventData": "Data for which you supply a decoder that confirms it's validity and match"
 }
 ```
 
 -}
 addEvent : RawIncomingEvent -> EventStream -> Result Error ( EventStream, List RawOutgoingEvent )
-addEvent rawIncomingEvent ((EventStream incomingEventsDecoders outgoingEventsEncoders listOfEvents) as eventStream) =
-    case getEventNameAndDecoder rawIncomingEvent eventStream of
+addEvent rawIncomingEvent ((EventStream incomingEventsMatcher outgoingEventsEncoders listOfEvents) as eventStream) =
+    case getEventNameAndMatcher rawIncomingEvent eventStream of
         Err error ->
             Err error
 
         Ok ( eventName, decoder ) ->
-            case decodeValue decoder rawIncomingEvent of
+            case decodeValue (decoder eventName) rawIncomingEvent of
                 Err decodeError ->
                     Err <| DecodeError decodeError
 
-                Ok decodedEvent ->
+                Ok _ ->
                     let
                         event =
                             Event eventName rawIncomingEvent
 
                         updatedEventStream =
                             EventStream
-                                incomingEventsDecoders
+                                incomingEventsMatcher
                                 outgoingEventsEncoders
                                 (event :: listOfEvents)
                     in
@@ -122,7 +127,20 @@ getEvents matcher ((EventStream _ _ listOfEvents) as eventStream) =
                 Just rawIncomingEvent
 
             else
-                Nothing
+                case getEventNameAndMatcher rawIncomingEvent eventStream of
+                    Err _ ->
+                        Nothing
+
+                    Ok ( _, incomingEventMatcher ) ->
+                        case Decode.decodeValue (incomingEventMatcher matcher) rawIncomingEvent of
+                            Ok True ->
+                                Just rawIncomingEvent
+
+                            Ok False ->
+                                Nothing
+
+                            Err _ ->
+                                Nothing
         )
         listOfEvents
 
@@ -150,10 +168,23 @@ triggerOutgoingEvents ((Event eventName rawIncomingEvent) as event) ((EventStrea
     let
         triggerOutgoingEvent ( matcher, outgoingEventEncoder ) =
             if eventName == matcher then
-                Just <| outgoingEventEncoder matcher rawIncomingEvent
+                Just <| outgoingEventEncoder matcher rawIncomingEvent eventStream
 
             else
-                Nothing
+                case getEventNameAndMatcher rawIncomingEvent eventStream of
+                    Err _ ->
+                        Nothing
+
+                    Ok ( _, incomingEventMatcher ) ->
+                        case Decode.decodeValue (incomingEventMatcher matcher) rawIncomingEvent of
+                            Ok True ->
+                                Just <| outgoingEventEncoder matcher rawIncomingEvent eventStream
+
+                            Ok False ->
+                                Nothing
+
+                            Err _ ->
+                                Nothing
 
         triggeredOutgoingEvents =
             List.filterMap triggerOutgoingEvent outgoingEventEncoders
@@ -188,14 +219,14 @@ fieldNameEventData =
 {- Attempt to find the eventName and validity decoder for given RawIncomingEvent -}
 
 
-getEventNameAndDecoder : RawIncomingEvent -> EventStream -> Result Error ( EventName, Decoder Bool )
-getEventNameAndDecoder rawIncomingEvent (EventStream (IncomingEventDecoders incomingEventsDecoders) _ _) =
+getEventNameAndMatcher : RawIncomingEvent -> EventStream -> Result Error ( EventName, IncomingEventMatcher )
+getEventNameAndMatcher rawIncomingEvent (EventStream (IncomingEventMatchers incomingEventsMatcher) _ _) =
     case Decode.decodeValue (Decode.field fieldNameEventName Decode.string) rawIncomingEvent of
         Err decodeError ->
             Err (DecodeError decodeError)
 
         Ok eventName ->
-            Dict.get eventName incomingEventsDecoders
+            Dict.get eventName incomingEventsMatcher
                 |> Maybe.map (\decoder -> Ok <| ( eventName, decoder ))
                 |> Maybe.withDefault (Err <| UnknownEvent eventName)
 
@@ -205,13 +236,13 @@ getEventNameAndDecoder rawIncomingEvent (EventStream (IncomingEventDecoders inco
 
 
 getEventName : RawIncomingEvent -> EventStream -> Maybe EventName
-getEventName rawIncomingEvent (EventStream (IncomingEventDecoders incomingEventsDecoders) _ _) =
+getEventName rawIncomingEvent (EventStream (IncomingEventMatchers incomingEventsMatcher) _ _) =
     case Decode.decodeValue (Decode.field fieldNameEventName Decode.string) rawIncomingEvent of
         Err decodeError ->
             Nothing
 
         Ok eventName ->
-            if Dict.member eventName incomingEventsDecoders then
+            if Dict.member eventName incomingEventsMatcher then
                 Just eventName
 
             else

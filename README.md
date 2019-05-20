@@ -9,11 +9,29 @@ Triggers can be placed to listen to events and consolidate the data in to a new 
 ### Creating a new EventStream
 
 ```elm
+eventMatcher : Matcher -> Decode.Decoder Bool
+eventMatcher matcher =
+    Decode.field "eventData"
+        (Decode.field "someField" Decode.string
+            |> Decode.andThen
+                (\someFieldValue ->
+                    if matcher == ("TestEvent." ++ someFieldValue) then
+                        Decode.succeed True
+
+                    else
+                        Decode.succeed False
+                )
+        )
+
+testEventEncoder : Matcher -> Decode.Value -> Result EventStream.Error Encode.Value
+testEventEncoder matcher rawEvent =
+    Ok <| Encode.string "outgoing"
+
 eventStream =
     EventStream.init
-        [ ( "TestEvent", aDecoderThatConfirmsTheEventsValidity )
+        [ ( "TestEvent", eventMatcher )
         ]
-        [ ( "TestEvent", anEncoderThatResultsInAOutgoingEvent ) ]
+        [ ( "TestEvent", testEventEncoder ) ]
 
 ```
 
