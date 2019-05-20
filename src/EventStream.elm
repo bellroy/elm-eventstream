@@ -1,12 +1,35 @@
 module EventStream exposing
-    ( Error
-    , EventStream
+    ( EventStream, init
+    , addEvent, getEvents
+    , Error, errorToString
     , Matcher
-    , addEvent
-    , errorToString
-    , getEvents
-    , init
     )
+
+{-| Keep track of a stream of events and set triggers that send out outgoing events.
+
+Currently in use by us to supply the Google Tag Managers Data Layer with safely encoded events.
+
+
+# The EventStream
+
+@docs EventStream, init
+
+
+# Events
+
+@docs addEvent, getEvents
+
+
+# Errors
+
+@docs Error, errorToString
+
+
+# Primitives
+
+@docs Matcher
+
+-}
 
 import Dict as Dict exposing (Dict, fromList, get, member)
 import Json.Decode as Decode exposing (Decoder, Error, Value, andThen, decodeValue, errorToString, fail, field, string, succeed)
@@ -14,17 +37,22 @@ import Json.Encode as Encode exposing (Value)
 import List as List exposing (filterMap)
 
 
-type Error
-    = UnknownEvent String
-    | DecodeError Decode.Error
-
-
+{-| The EventStream holds the possible eventNames and matchers, triggers for outgoing events and ofcourse every past events
+-}
 type EventStream
     = EventStream IncomingEventMatchers Triggers ListOfIncomingEvents
 
 
 type IncomingEventMatchers
     = IncomingEventMatchers (Dict.Dict EventName IncomingEventMatcher)
+
+
+{-| A structured error describing why your mutation to the EventStream failed.
+You can use this to give feedback to the developer who might be adding an unknown or misformed event.
+-}
+type Error
+    = UnknownEvent String
+    | DecodeError Decode.Error
 
 
 type alias IncomingEventMatcher =
@@ -47,6 +75,14 @@ type alias EventName =
     String
 
 
+{-| The Matcher is currently an alias for the Core String type.
+The Matcher allows for more advanced, event specific triggers to be set.
+You might have an event A that contains a field `name` on which you want to place a specific trigger.
+This could then look like `A.someValue`.
+
+Please refer to the tests included for more examples
+
+-}
 type alias Matcher =
     String
 
