@@ -1,6 +1,6 @@
 module EventStreamTest exposing (suite)
 
-import EventStream exposing (Error, EventStream, Matcher, addEvent, errorToString, getEvents, init)
+import EventStream exposing (Error, EventStream, Matcher, addEvent, addTrigger, errorToString, getEvents, init)
 import Expect as Expect exposing (equal, fail, pass)
 import Json.Decode as Decode exposing (Decoder, andThen, decodeValue, errorToString, field, string, succeed)
 import Json.Encode as Encode exposing (Value, null, object, string)
@@ -93,6 +93,28 @@ suite =
         , Test.test "Receive an outgoingEvent"
             (\() ->
                 case EventStream.addEvent mockRawTestEvent mockEventStream of
+                    Ok ( updatedEventStream, [ outgoingEvent ] ) ->
+                        case Decode.decodeValue Decode.string outgoingEvent of
+                            Ok string ->
+                                Expect.equal string "outgoing"
+
+                            Err error ->
+                                Expect.fail <| Decode.errorToString error
+
+                    Ok ( updatedEventStream, _ ) ->
+                        Expect.fail "Expected to receive one outgoingEvent"
+
+                    Err error ->
+                        Expect.fail <| EventStream.errorToString error
+            )
+        , Test.test "Set a trigger after initializing the eventStream"
+            (\() ->
+                let
+                    result =
+                        EventStream.addTrigger "AnotherTestEvent" mockTestEventEncoder mockEventStream
+                            |> EventStream.addEvent (mockRawAnotherTestEvent "someValue")
+                in
+                case result of
                     Ok ( updatedEventStream, [ outgoingEvent ] ) ->
                         case Decode.decodeValue Decode.string outgoingEvent of
                             Ok string ->

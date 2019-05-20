@@ -1,6 +1,7 @@
 module EventStream exposing
     ( EventStream, init
     , addEvent, getEvents
+    , addTrigger
     , Error, errorToString
     , Matcher
     )
@@ -18,6 +19,11 @@ Currently in use by us to supply the Google Tag Managers Data Layer with safely 
 # Events
 
 @docs addEvent, getEvents
+
+
+# triggers
+
+@docs addTrigger
 
 
 # Errors
@@ -181,6 +187,13 @@ getEvents matcher ((EventStream _ _ listOfEvents) as eventStream) =
         listOfEvents
 
 
+{-| Add a trigger to the EventStream
+-}
+addTrigger : Matcher -> OutgoingEventDecoder -> EventStream -> EventStream
+addTrigger matcher outgoingEventDecoder (EventStream incomingEventsMatcher (Triggers outgoingEventEncoders) listOfEvents) =
+    EventStream incomingEventsMatcher (Triggers (( matcher, outgoingEventDecoder ) :: outgoingEventEncoders)) listOfEvents
+
+
 {-| Convert an EventStream error into a String that is nice for debugging.
 -}
 errorToString : Error -> String
@@ -191,10 +204,6 @@ errorToString error =
 
         DecodeError decodeError ->
             Decode.errorToString decodeError
-
-
-
-{- INTERNALS -}
 
 
 {-| Takes the eventStream and for given event returns a list of triggered outgoing events
