@@ -3,7 +3,7 @@
     "name": "tricycle/elm-eventstream",
     "summary": "Keeps track and listens to your events of any form",
     "license": "BSD-3-Clause",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "exposed-modules": [
         "EventStream"
     ],
