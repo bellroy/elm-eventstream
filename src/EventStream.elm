@@ -70,7 +70,7 @@ type Triggers
 
 
 type alias OutgoingEventDecoder =
-    Matcher -> Decode.Value -> EventStream -> Result Error Encode.Value
+    Matcher -> Decode.Value -> EventStream -> Result Decode.Error Encode.Value
 
 
 type alias ListOfIncomingEvents =
@@ -236,7 +236,7 @@ triggerOutgoingEvents ((Event eventName rawIncomingEvent) as event) ((EventStrea
     in
     case firstErrorInList triggeredOutgoingEvents of
         Just error ->
-            Err error
+            Err (DecodeError error)
 
         Nothing ->
             Ok <| List.filterMap Result.toMaybe triggeredOutgoingEvents

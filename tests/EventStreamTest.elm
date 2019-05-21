@@ -2,7 +2,7 @@ module EventStreamTest exposing (suite)
 
 import EventStream exposing (Error, EventStream, Matcher, addEvent, addTrigger, errorToString, getEvents, init)
 import Expect as Expect exposing (equal, fail, pass)
-import Json.Decode as Decode exposing (Decoder, andThen, decodeValue, errorToString, field, string, succeed)
+import Json.Decode as Decode exposing (Decoder, Error, andThen, decodeValue, errorToString, field, string, succeed)
 import Json.Encode as Encode exposing (Value, null, object, string)
 import Test as Test exposing (Test, describe, test)
 
@@ -27,7 +27,7 @@ mockAnotherTestEventMatcher matcher =
         )
 
 
-mockTestEventEncoder : Matcher -> Decode.Value -> EventStream -> Result EventStream.Error Encode.Value
+mockTestEventEncoder : Matcher -> Decode.Value -> EventStream -> Result Decode.Error Encode.Value
 mockTestEventEncoder matcher rawEvent eventStream =
     Ok <| Encode.string "outgoing"
 
