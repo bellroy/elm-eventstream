@@ -1,9 +1,9 @@
 {
     "type": "package",
-    "name": "tricycle/elm-eventstream",
+    "name": "bellroy/elm-eventstream",
     "summary": "Keeps track and listens to your events of any form",
     "license": "BSD-3-Clause",
-    "version": "1.1.1",
+    "version": "1.0.0",
     "exposed-modules": [
         "EventStream"
     ],
